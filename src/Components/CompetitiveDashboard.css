@@ -1442,6 +1442,39 @@
   cursor: not-allowed;
 }
 
+.email-modal-field-textarea {
+  align-items: flex-start;
+}
+
+.email-modal-textarea {
+  flex: 1;
+  padding: 12px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: #1a1a1a;
+  background-color: #ffffff;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 80px;
+}
+
+.email-modal-textarea::placeholder {
+  color: #9ca3af;
+}
+
+.email-modal-textarea:focus {
+  outline: none;
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+}
+
+.email-modal-textarea:disabled {
+  background-color: #f9fafb;
+  cursor: not-allowed;
+}
+
 .email-modal-schedule-section {
   display: flex;
   flex-direction: column;
