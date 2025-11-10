@@ -143,18 +143,84 @@ const Summary = forwardRef<SummaryRef, SummaryProps>(({ insights, isLoading, err
       setWeeklyReleasesError(null);
       
       try {
-        const response = await fetch('http://localhost:8000/weekly-releases');
+        // Fetch recent features and group by company
+        const response = await fetch('http://localhost:8000/features?skip=0&limit=200');
         
         if (!response.ok) {
           throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
         }
         
-        const data = await response.json();
-        console.log('Weekly releases data:', data);
-        setWeeklyReleases(data);
+        const features = await response.json();
+        console.log('Features data received:', features);
+        
+        // Get features from the last 7 days
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+        
+        const weeklyFeatures = features.filter((feature: WeeklyRelease) => {
+          const releaseDate = new Date(feature.release_date);
+          return releaseDate >= oneWeekAgo;
+        });
+        
+        // Group features by company
+        const companiesMap = new Map<string, CompanyData>();
+        
+        weeklyFeatures.forEach((feature: WeeklyRelease) => {
+          const companyName = feature.company_name;
+          if (!companiesMap.has(companyName)) {
+            companiesMap.set(companyName, {
+              company: {
+                id: feature.company_id,
+                name: companyName,
+                homepage_url: '',
+                is_active: true,
+                last_check_at: new Date().toISOString()
+              },
+              week_summary: {
+                total_releases: 0,
+                total_features: 0,
+                last_week_releases: 0,
+                trend: 'steady',
+                trend_direction: 'up'
+              },
+              category_distribution: [],
+              all_features: []
+            });
+          }
+          
+          const companyData = companiesMap.get(companyName);
+          if (companyData) {
+            companyData.week_summary.total_features++;
+            companyData.all_features.push({
+            id: feature.id,
+            name: feature.name,
+            summary: feature.summary,
+            category: feature.category,
+            version: feature.version,
+            release_date: feature.release_date,
+            highlights: feature.highlights || [],
+            company_id: feature.company_id,
+            company_name: feature.company_name
+          });
+          }
+        });
+        
+        // Convert to array format expected by the component
+        const weeklyReleasesData: WeeklyReleasesData = {
+          companies: Array.from(companiesMap.values()),
+          overall_summary: {
+            total_releases: weeklyFeatures.length,
+            total_features: weeklyFeatures.length,
+            active_companies: companiesMap.size
+          },
+          generated_at: new Date().toISOString()
+        };
+        
+        console.log('Transformed weekly releases data:', weeklyReleasesData);
+        setWeeklyReleases(weeklyReleasesData);
       } catch (error) {
-        console.error('Error fetching weekly releases:', error);
-        setWeeklyReleasesError(error instanceof Error ? error.message : 'Failed to load weekly releases');
+        console.error('Error fetching features:', error);
+        setWeeklyReleasesError(error instanceof Error ? error.message : 'Failed to load release data');
       } finally {
         setWeeklyReleasesLoading(false);
       }
