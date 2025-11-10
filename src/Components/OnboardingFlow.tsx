@@ -5,6 +5,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Progress } from './ui/progress';
+import { LoadingAnalysis } from './LoadingAnalysis';
 import './OnboardingFlow.css';
 
 interface OnboardingFlowProps {
@@ -22,6 +23,20 @@ interface Category {
   name: string;
 }
 
+interface CompanyAPIResponse {
+  id?: number | string;
+  name?: string;
+  release_page_url?: string;
+  releaseUrl?: string;
+  changelog_url?: string;
+}
+
+interface CategoryAPIResponse {
+  id?: number | string;
+  name?: string;
+  description?: string;
+}
+
 export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   const [step, setStep] = useState(1);
   const [companyName, setCompanyName] = useState('Mindbody Inc');
@@ -29,6 +44,8 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
 
   const totalSteps = 4;
   const progress = (step / totalSteps) * 100;
@@ -44,15 +61,14 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
         const companiesData = await companiesResponse.json();
         
         // Map companies to competitors format
-        const mappedCompetitors = companiesData.map((company: any) => ({
+        const mappedCompetitors = (companiesData as CompanyAPIResponse[]).map((company) => ({
           id: company.id?.toString() || Date.now().toString(),
           name: company.name || '',
-          releaseUrl: company.release_page_url || company.releaseUrl || ''
+          releaseUrl: company.release_page_url || company.releaseUrl || company.changelog_url || ''
         }));
         
-        setCompetitors(mappedCompetitors.length > 0 ? mappedCompetitors : [
-          { id: '1', name: 'Zenoti', releaseUrl: 'https://zenoti.com/releases' }
-        ]);
+        // Only set competitors if we got data from API, otherwise start with empty
+        setCompetitors(mappedCompetitors.length > 0 ? mappedCompetitors : []);
 
         // Fetch categories
         const categoriesResponse = await fetch('http://localhost:8000/categories');
@@ -64,7 +80,7 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
           : categoriesData.categories || [];
         
         // Map categories
-        const mappedCategories = categoriesArray.map((category: any) => ({
+        const mappedCategories = (categoriesArray as CategoryAPIResponse[]).map((category) => ({
           id: category.id?.toString() || Date.now().toString(),
           name: category.name || ''
         }));
@@ -77,14 +93,9 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
         setLoading(false);
       } catch (error) {
         console.error('Error fetching data:', error);
-        // Set default values if fetch fails
-        setCompetitors([
-          { id: '1', name: 'Zenoti', releaseUrl: 'https://zenoti.com/releases' }
-        ]);
-        setCategories([
-          { id: '1', name: 'Appointments' },
-          { id: '2', name: 'Analytics' }
-        ]);
+        // Start with empty arrays if fetch fails
+        setCompetitors([]);
+        setCategories([]);
         setLoading(false);
       }
     };
@@ -93,7 +104,7 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   }, []);
 
   const addCompetitor = () => {
-    setCompetitors([...competitors, { id: Date.now().toString(), name: '', releaseUrl: '' }]);
+    setCompetitors([...competitors, { id: `new_${Date.now()}`, name: '', releaseUrl: '' }]);
   };
 
   const removeCompetitor = (id: string) => {
@@ -107,7 +118,7 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   };
 
   const addCategory = () => {
-    setCategories([...categories, { id: Date.now().toString(), name: '' }]);
+    setCategories([...categories, { id: `new_${Date.now()}`, name: '' }]);
   };
 
   const removeCategory = (id: string) => {
@@ -118,6 +129,71 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
     setCategories(categories.map(c => 
       c.id === id ? { ...c, name: value } : c
     ));
+  };
+
+  const handleStartAnalysis = async () => {
+    const baseURL = 'http://localhost:8000';
+    
+    try {
+      // Check if there are any competitors at all
+      if (competitors.length === 0) {
+        console.error('No competitors added. Please add at least one competitor.');
+        alert('Please add at least one competitor before starting analysis.');
+        return;
+      }
+
+      // Check if we need to create new companies
+      // New competitors have IDs starting with "new_", API companies have numeric IDs
+      const newCompetitors = competitors.filter(c => c.id.startsWith('new_'));
+      
+      if (newCompetitors.length > 0) {
+        // Create the first new competitor and get its ID
+        const firstNew = newCompetitors[0];
+        
+        if (!firstNew.name || !firstNew.releaseUrl) {
+          alert('Please provide both company name and release page URL.');
+          return;
+        }
+        
+        const response = await fetch(`${baseURL}/companies`, {
+          method: 'POST',
+          headers: {
+            'accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: firstNew.name,
+            homepage_url: firstNew.releaseUrl
+          })
+        });
+
+        if (response.ok) {
+          const createdCompany = await response.json();
+          console.log('Company created:', createdCompany);
+          setSelectedCompanyId(createdCompany.id?.toString() || null);
+        } else {
+          console.error('Failed to create company');
+          // Fallback to first existing company (from API)
+          const existingCompany = competitors.find(c => !c.id.startsWith('new_'));
+          if (existingCompany) {
+            setSelectedCompanyId(existingCompany.id);
+          } else {
+            alert('Failed to create company. Please try again.');
+            return;
+          }
+        }
+      } else {
+        // Use the first existing company from prefilled data
+        const firstCompany = competitors[0];
+        setSelectedCompanyId(firstCompany.id);
+      }
+
+      // Start the analysis flow
+      setIsAnalyzing(true);
+    } catch (error) {
+      console.error('Error in handleStartAnalysis:', error);
+      alert('An error occurred while starting analysis. Please try again.');
+    }
   };
 
   if (loading) {
@@ -416,28 +492,32 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
                     </div>
                   </div>
 
-                  <div className="summary-section">
-                    <h3 className="summary-heading">Tracking {competitors.length} Competitors</h3>
-                    <div className="competitors-summary">
-                      {competitors.map((competitor) => (
-                        <div key={competitor.id} className="competitor-summary-item">
-                          <span className="competitor-summary-name">{competitor.name || 'Unnamed Competitor'}</span>
-                          <span className="competitor-summary-url">{competitor.releaseUrl}</span>
-                        </div>
-                      ))}
+                  {competitors.length > 0 && (
+                    <div className="summary-section">
+                      <h3 className="summary-heading">Tracking {competitors.length} Competitors</h3>
+                      <div className="competitors-summary">
+                        {competitors.map((competitor) => (
+                          <div key={competitor.id} className="competitor-summary-item">
+                            <span className="competitor-summary-name">{competitor.name || 'Unnamed Competitor'}</span>
+                            <span className="competitor-summary-url">{competitor.releaseUrl}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
-                  <div className="summary-section">
-                    <h3 className="summary-heading">{categories.length} Categories</h3>
-                    <div className="categories-badges">
-                      {categories.map((category) => (
-                        <div key={category.id} className="category-badge">
-                          {category.name || 'Unnamed Category'}
-                        </div>
-                      ))}
+                  {categories.length > 0 && (
+                    <div className="summary-section">
+                      <h3 className="summary-heading">{categories.length} Categories</h3>
+                      <div className="categories-badges">
+                        {categories.map((category) => (
+                          <div key={category.id} className="category-badge">
+                            {category.name || 'Unnamed Category'}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
 
@@ -447,7 +527,7 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
                   Back
                 </Button>
                 <Button 
-                  onClick={onComplete}
+                  onClick={handleStartAnalysis}
                   className="start-button"
                 >
                   <CheckCircle2 className="button-icon-left" />
@@ -458,6 +538,14 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Loading Analysis Overlay */}
+      {isAnalyzing && selectedCompanyId && (
+        <LoadingAnalysis 
+          companyId={selectedCompanyId} 
+          onComplete={onComplete} 
+        />
+      )}
     </div>
   );
 }
