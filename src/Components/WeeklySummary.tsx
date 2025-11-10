@@ -93,18 +93,18 @@ const WeeklySummary: React.FC = () => {
       setError(null);
       
       try {
-        const response = await fetch('http://localhost:8000/insights/weekly');
+        const response = await fetch('http://localhost:8000/insights');
         
         if (!response.ok) {
           throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
         }
         
         const data = await response.json();
-        console.log('Weekly insights data received:', data);
+        console.log('Insights data received:', data);
         setInsights(data);
       } catch (error) {
-        console.error('Error fetching weekly insights:', error);
-        setError(error instanceof Error ? error.message : 'Failed to load weekly insights');
+        console.error('Error fetching insights:', error);
+        setError(error instanceof Error ? error.message : 'Failed to load insights');
       } finally {
         setIsLoading(false);
       }
