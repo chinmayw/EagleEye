@@ -279,27 +279,78 @@ const Releases: React.FC = () => {
         throw new Error('Canvas dimensions are invalid. Cannot generate PDF.');
       }
 
-      // Draw table container at the top
-      ctx.drawImage(tableCanvas, 0, 0);
-      // Draw footer below the table
-      ctx.drawImage(footerCanvas, 0, tableCanvas.height);
+      // Convert source canvases to data URLs first to avoid tainting issues
+      let tableDataUrl: string;
+      let footerDataUrl: string;
+      
+      try {
+        tableDataUrl = tableCanvas.toDataURL('image/png', 1.0);
+        footerDataUrl = footerCanvas.toDataURL('image/png', 1.0);
+        
+        console.log('Table canvas data URL length:', tableDataUrl.length);
+        console.log('Footer canvas data URL length:', footerDataUrl.length);
+        
+        // Validate source data URLs
+        if (!tableDataUrl || tableDataUrl === 'data:,' || !tableDataUrl.startsWith('data:image/png;base64,')) {
+          console.error('Invalid table canvas data URL:', tableDataUrl.substring(0, 100));
+          throw new Error('Failed to capture table image. Please try again.');
+        }
+        
+        if (!footerDataUrl || footerDataUrl === 'data:,' || !footerDataUrl.startsWith('data:image/png;base64,')) {
+          console.error('Invalid footer canvas data URL:', footerDataUrl.substring(0, 100));
+          throw new Error('Failed to capture footer image. Please try again.');
+        }
+      } catch (error) {
+        console.error('Error converting source canvases to data URLs:', error);
+        throw new Error('Failed to convert canvases to images. This may be due to CORS restrictions or empty content.');
+      }
+
+      // Load images from data URLs and draw them onto combined canvas
+      const loadImage = (dataUrl: string): Promise<HTMLImageElement> => {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error('Failed to load image from data URL'));
+          img.src = dataUrl;
+        });
+      };
+
+      try {
+        const [tableImage, footerImage] = await Promise.all([
+          loadImage(tableDataUrl),
+          loadImage(footerDataUrl)
+        ]);
+
+        // Draw table container at the top
+        ctx.drawImage(tableImage, 0, 0);
+        // Draw footer below the table
+        ctx.drawImage(footerImage, 0, tableCanvas.height);
+      } catch (error) {
+        console.error('Error loading images:', error);
+        throw new Error('Failed to load images for PDF generation. Please try again.');
+      }
 
       // Ensure canvas is fully rendered before converting
-      // Small delay to ensure all drawing operations are complete
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
-      // Convert canvas to image data URL with validation
+      // Convert combined canvas to image data URL with validation
       let imageDataUrl: string;
       try {
         imageDataUrl = combinedCanvas.toDataURL('image/png', 1.0);
+        console.log('Combined canvas data URL length:', imageDataUrl.length);
       } catch (error) {
-        console.error('Error converting canvas to data URL:', error);
-        throw new Error('Failed to convert canvas to image. Please try again.');
+        console.error('Error converting combined canvas to data URL:', error);
+        // If toDataURL fails, try using the source canvases directly
+        console.log('Attempting fallback: using source canvases directly');
+        throw new Error('Failed to convert canvas to image. The canvas may be tainted due to CORS restrictions.');
       }
       
       // Validate the data URL
       if (!imageDataUrl || imageDataUrl === 'data:,') {
-        throw new Error('Failed to generate image from canvas. Canvas may be empty.');
+        console.error('Empty data URL detected. Canvas dimensions:', combinedCanvas.width, 'x', combinedCanvas.height);
+        console.error('Table canvas dimensions:', tableCanvas.width, 'x', tableCanvas.height);
+        console.error('Footer canvas dimensions:', footerCanvas.width, 'x', footerCanvas.height);
+        throw new Error('Failed to generate image from canvas. Canvas may be empty or tainted.');
       }
 
       // Validate PNG signature (should start with data:image/png;base64,)
