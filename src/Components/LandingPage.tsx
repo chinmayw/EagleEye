@@ -72,7 +72,8 @@ const LandingPage: React.FC = () => {
 
           <div className="step-card">
             <div className="step-number step-number-2">2</div>
-            <h3 className="step-title">AI Analyzes Everything</h3>
+            <h3 className="step-title">AI Analyzes</h3>
+            <h3 className="step-title">You Control</h3>
             <p className="step-description">
               Our AI categorizes releases, detects trends,<br />
               and surfaces insights automatically.
