@@ -24,7 +24,7 @@ interface Category {
 
 export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   const [step, setStep] = useState(1);
-  const [companyName, setCompanyName] = useState('Acme Corp');
+  const [companyName, setCompanyName] = useState('Mindbody Inc');
   const [slackConnected, setSlackConnected] = useState(false);
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -194,7 +194,7 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
                         <Slack className="icon-white" />
                       </div>
                       <div className="slack-details">
-                        <p className="workspace-name">Acme Corp Workspace</p>
+                        <p className="workspace-name">Mindbody Inc Workspace</p>
                         <p className="channel-name">#competitive-intel</p>
                       </div>
                     </div>
