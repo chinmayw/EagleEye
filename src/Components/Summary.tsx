@@ -1,4 +1,4 @@
-import React, { useRef, forwardRef, useImperativeHandle, useState, useEffect } from 'react';
+import { useRef, forwardRef, useImperativeHandle, useState, useEffect } from 'react';
 
 export type SummaryRef = {
   downloadPDF: () => Promise<void>;
