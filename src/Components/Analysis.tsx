@@ -176,9 +176,9 @@ const Analysis: React.FC = () => {
         console.log('Fetching data from APIs...');
         
         // Fetch all APIs in parallel
-        const [insightsResponse, anomaliesResponse, overviewResponse] = await Promise.all([
-          fetch('http://localhost:8000/insights/1'),
-          fetch('http://localhost:8000/analytics/anomalies-enhanced'),
+        const [insightsResponse,  overviewResponse] = await Promise.all([
+          fetch('http://localhost:8000/insights/latest'),
+          //fetch('http://localhost:8000/analytics/anomalies-enhanced'),
           fetch('http://localhost:8000/analytics/overview')
         ]);
         
@@ -191,16 +191,16 @@ const Analysis: React.FC = () => {
         setInsights(insightsData);
         
         // Handle anomalies response
-        if (anomaliesResponse.ok) {
-          const anomaliesData = await anomaliesResponse.json();
-          console.log('Anomalies data received:', anomaliesData);
-          // If the response is an array, use it directly, otherwise check for a data property
-          const anomaliesArray = Array.isArray(anomaliesData) ? anomaliesData : anomaliesData.anomalies || [];
-          setAnomalies(anomaliesArray);
-        } else {
-          console.warn('Failed to fetch anomalies, using fallback');
-          setAnomalies([]);
-        }
+        // if (anomaliesResponse.ok) {
+        //   const anomaliesData = await anomaliesResponse.json();
+        //   console.log('Anomalies data received:', anomaliesData);
+        //   // If the response is an array, use it directly, otherwise check for a data property
+        //   const anomaliesArray = Array.isArray(anomaliesData) ? anomaliesData : anomaliesData.anomalies || [];
+        //   setAnomalies(anomaliesArray);
+        // } else {
+        //   console.warn('Failed to fetch anomalies, using fallback');
+        //   setAnomalies([]);
+        // }
         
         // Handle overview response
         if (overviewResponse.ok) {
@@ -309,7 +309,6 @@ const Analysis: React.FC = () => {
   const colors = ['#5b7cff', '#a78bfa', '#22d3ee', '#10b981', '#f59e0b', '#ef4444'];
   const competitorContribution = overview?.release_contributions 
     ? Object.entries(overview.release_contributions)
-        .slice(0, 4) // Take top 4 companies
         .map(([name, data], index) => ({
           name: name.charAt(0).toUpperCase() + name.slice(1),
           value: Math.round(data.percentage),
