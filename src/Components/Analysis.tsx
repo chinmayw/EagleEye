@@ -180,25 +180,21 @@ const Analysis: React.FC = () => {
 
   // Fetch insights, anomalies and overview data from APIs
   useEffect(() => {
+    let isMounted = true;
+    const abortController = new AbortController();
+    
     const fetchData = async () => {
       setIsLoading(true);
       setError(null);
       
       try {
-        // Fetch all APIs in parallel - each independently
-        const [insightsResponse, anomaliesResponse, overviewResponse] = await Promise.all([
-          fetch('http://localhost:8000/insights/1').catch(err => {
-            console.warn('Insights fetch failed:', err);
-            return null;
-          }),
-          fetch('http://localhost:8000/anomalies').catch(err => {
-            console.warn('Anomalies fetch failed:', err);
-            return null;
-          }),
-          fetch('http://localhost:8000/analytics/overview').catch(err => {
-            console.warn('Overview fetch failed:', err);
-            return null;
-          })
+        console.log('[Analysis] Fetching data from APIs...');
+        
+        // Fetch all APIs in parallel
+        const [insightsResponse,  overviewResponse] = await Promise.all([
+          fetch('http://localhost:8000/insights/latest', { signal: abortController.signal }),
+          //fetch('http://localhost:8000/analytics/anomalies-enhanced', { signal: abortController.signal }),
+          fetch('http://localhost:8000/analytics/overview', { signal: abortController.signal })
         ]);
         
         // Handle insights response
@@ -210,35 +206,69 @@ const Analysis: React.FC = () => {
           setInsights(null);
         }
         
-        // Handle anomalies response
-        if (anomaliesResponse && anomaliesResponse.ok) {
-          const anomaliesData = await anomaliesResponse.json();
-          // If the response is an array, use it directly, otherwise check for a data property
-          const anomaliesArray = Array.isArray(anomaliesData) ? anomaliesData : anomaliesData.anomalies || [];
-          setAnomalies(anomaliesArray);
-        } else {
-          console.warn('Failed to fetch anomalies');
-          setAnomalies([]);
+        const insightsData = await insightsResponse.json();
+        console.log('[Analysis] Insights data received:', insightsData);
+        
+        if (isMounted) {
+          setInsights(insightsData);
         }
+        
+        // Handle anomalies response
+        // if (anomaliesResponse.ok) {
+        //   const anomaliesData = await anomaliesResponse.json();
+        //   console.log('[Analysis] Anomalies data received:', anomaliesData);
+        //   // If the response is an array, use it directly, otherwise check for a data property
+        //   const anomaliesArray = Array.isArray(anomaliesData) ? anomaliesData : anomaliesData.anomalies || [];
+        //   if (isMounted) {
+        //     setAnomalies(anomaliesArray);
+        //   }
+        // } else {
+        //   console.warn('[Analysis] Failed to fetch anomalies, using fallback');
+        //   if (isMounted) {
+        //     setAnomalies([]);
+        //   }
+        // }
         
         // Handle overview response
         if (overviewResponse && overviewResponse.ok) {
           const overviewData = await overviewResponse.json();
-          setOverview(overviewData);
+          console.log('[Analysis] Overview data received:', overviewData);
+          if (isMounted) {
+            setOverview(overviewData);
+          }
         } else {
-          console.warn('Failed to fetch overview');
-          setOverview(null);
+          console.warn('[Analysis] Failed to fetch overview, using insights data as fallback');
+          if (isMounted) {
+            setOverview(null);
+          }
         }
       } catch (error) {
-        console.error('Error fetching data:', error);
+        if (error instanceof Error && error.name === 'AbortError') {
+          console.log('[Analysis] Fetch aborted');
+          return;
+        }
+        console.error('[Analysis] Error fetching data:', error);
         // Don't completely fail if API is unavailable, show the page with sample data
-        setError(error instanceof Error ? error.message : 'Failed to load data');
+        if (isMounted) {
+          setError(error instanceof Error ? error.message : 'Failed to load data');
+          // Set some default data to prevent blank page
+          setInsights(null);
+          setAnomalies([]);
+          setOverview(null);
+        }
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchData();
+    
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
   }, []);
 
   // Helper function to format category names
@@ -311,7 +341,6 @@ const Analysis: React.FC = () => {
   const colors = ['#5b7cff', '#a78bfa', '#22d3ee', '#10b981', '#f59e0b', '#ef4444'];
   const competitorContribution = overview?.release_contributions 
     ? Object.entries(overview.release_contributions)
-        .slice(0, 4) // Take top 4 companies
         .map(([name, data], index) => ({
           name: name.charAt(0).toUpperCase() + name.slice(1),
           value: Math.round(data.percentage),
