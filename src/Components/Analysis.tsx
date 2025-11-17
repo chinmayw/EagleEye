@@ -191,43 +191,41 @@ const Analysis: React.FC = () => {
         console.log('[Analysis] Fetching data from APIs...');
         
         // Fetch all APIs in parallel
-        const [insightsResponse,  overviewResponse] = await Promise.all([
+        const [insightsResponse, anomaliesResponse, overviewResponse] = await Promise.all([
           fetch('http://localhost:8000/insights/latest', { signal: abortController.signal }),
-          //fetch('http://localhost:8000/analytics/anomalies-enhanced', { signal: abortController.signal }),
+          fetch('http://localhost:8000/anomalies', { signal: abortController.signal }),
           fetch('http://localhost:8000/analytics/overview', { signal: abortController.signal })
         ]);
         
         // Handle insights response
         if (insightsResponse && insightsResponse.ok) {
           const insightsData = await insightsResponse.json();
-          setInsights(insightsData);
+          console.log('[Analysis] Insights data received:', insightsData);
+          if (isMounted) {
+            setInsights(insightsData);
+          }
         } else {
-          console.warn('Failed to fetch insights');
-          setInsights(null);
-        }
-        
-        const insightsData = await insightsResponse.json();
-        console.log('[Analysis] Insights data received:', insightsData);
-        
-        if (isMounted) {
-          setInsights(insightsData);
+          console.warn('[Analysis] Failed to fetch insights');
+          if (isMounted) {
+            setInsights(null);
+          }
         }
         
         // Handle anomalies response
-        // if (anomaliesResponse.ok) {
-        //   const anomaliesData = await anomaliesResponse.json();
-        //   console.log('[Analysis] Anomalies data received:', anomaliesData);
-        //   // If the response is an array, use it directly, otherwise check for a data property
-        //   const anomaliesArray = Array.isArray(anomaliesData) ? anomaliesData : anomaliesData.anomalies || [];
-        //   if (isMounted) {
-        //     setAnomalies(anomaliesArray);
-        //   }
-        // } else {
-        //   console.warn('[Analysis] Failed to fetch anomalies, using fallback');
-        //   if (isMounted) {
-        //     setAnomalies([]);
-        //   }
-        // }
+        if (anomaliesResponse && anomaliesResponse.ok) {
+          const anomaliesData = await anomaliesResponse.json();
+          console.log('[Analysis] Anomalies data received:', anomaliesData);
+          // If the response is an array, use it directly, otherwise check for a data property
+          const anomaliesArray = Array.isArray(anomaliesData) ? anomaliesData : anomaliesData.anomalies || [];
+          if (isMounted) {
+            setAnomalies(anomaliesArray);
+          }
+        } else {
+          console.warn('[Analysis] Failed to fetch anomalies');
+          if (isMounted) {
+            setAnomalies([]);
+          }
+        }
         
         // Handle overview response
         if (overviewResponse && overviewResponse.ok) {
@@ -237,7 +235,7 @@ const Analysis: React.FC = () => {
             setOverview(overviewData);
           }
         } else {
-          console.warn('[Analysis] Failed to fetch overview, using insights data as fallback');
+          console.warn('[Analysis] Failed to fetch overview');
           if (isMounted) {
             setOverview(null);
           }
