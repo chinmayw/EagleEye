@@ -59,7 +59,7 @@ export function LoadingAnalysis({ companyId, onComplete }: LoadingAnalysisProps)
         if (!isMounted) return;
         try {
           const scrapeResponse = await fetch(
-            `${baseURL}/companies/${companyId}/process-company`,
+            `${baseURL}/process-company`,
             {
               method: 'POST',
               headers: {
@@ -104,17 +104,8 @@ export function LoadingAnalysis({ companyId, onComplete }: LoadingAnalysisProps)
 
         // Step 4: Building insights and trends (Real API)
         if (!isMounted) return;
-        try {
-          const anomaliesResponse = await fetch(`${baseURL}/analytics/anomalies-enhanced`);
-          
-          if (anomaliesResponse.ok) {
-            const anomaliesData = await anomaliesResponse.json();
-            console.log('Anomalies analysis completed:', anomaliesData);
-          }
-        } catch (error) {
-          console.error('Step 4 API error:', error);
-          // Continue even if API fails
-        }
+        // Simulate step 4 (Building insights and trends) with a delay
+        await new Promise(resolve => setTimeout(resolve, 1200));
         
         setProgress(100);
         setSteps(prevSteps =>
