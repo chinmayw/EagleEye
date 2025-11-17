@@ -45,16 +45,28 @@ interface InsightsData {
 }
 
 interface AnomalyData {
-  anomaly_type: string;
-  description: string;
-  severity: 'high' | 'medium' | 'low';
-  affected_entity: string;
-  metric_value: number;
-  expected_range?: {
-    min: number;
-    max: number;
+  id: number;
+  feature_id: number;
+  company_id: number;
+  category_id: number | null;
+  anomaly_score: number;
+  business_rank: number;
+  business_value_score: number;
+  explanation: string;
+  business_reason: string;
+  detection_weeks: number;
+  detected_at: string;
+  release_date: string;
+  feature: {
+    id: number;
+    name: string;
+    summary: string;
+    highlights: string[];
+    category: string;
+    company_name: string;
+    release_date: string;
+    version: string | null;
   };
-  recommendation?: string;
 }
 
 interface OverviewData {
@@ -173,52 +185,54 @@ const Analysis: React.FC = () => {
       setError(null);
       
       try {
-        console.log('Fetching data from APIs...');
-        
-        // Fetch all APIs in parallel
+        // Fetch all APIs in parallel - each independently
         const [insightsResponse, anomaliesResponse, overviewResponse] = await Promise.all([
-          fetch('http://localhost:8000/insights/1'),
-          fetch('http://localhost:8000/analytics/anomalies-enhanced'),
-          fetch('http://localhost:8000/analytics/overview')
+          fetch('http://localhost:8000/insights/1').catch(err => {
+            console.warn('Insights fetch failed:', err);
+            return null;
+          }),
+          fetch('http://localhost:8000/anomalies').catch(err => {
+            console.warn('Anomalies fetch failed:', err);
+            return null;
+          }),
+          fetch('http://localhost:8000/analytics/overview').catch(err => {
+            console.warn('Overview fetch failed:', err);
+            return null;
+          })
         ]);
         
-        if (!insightsResponse.ok) {
-          throw new Error(`Failed to fetch insights: ${insightsResponse.status} ${insightsResponse.statusText}`);
+        // Handle insights response
+        if (insightsResponse && insightsResponse.ok) {
+          const insightsData = await insightsResponse.json();
+          setInsights(insightsData);
+        } else {
+          console.warn('Failed to fetch insights');
+          setInsights(null);
         }
         
-        const insightsData = await insightsResponse.json();
-        console.log('Insights data received:', insightsData);
-        setInsights(insightsData);
-        
         // Handle anomalies response
-        if (anomaliesResponse.ok) {
+        if (anomaliesResponse && anomaliesResponse.ok) {
           const anomaliesData = await anomaliesResponse.json();
-          console.log('Anomalies data received:', anomaliesData);
           // If the response is an array, use it directly, otherwise check for a data property
           const anomaliesArray = Array.isArray(anomaliesData) ? anomaliesData : anomaliesData.anomalies || [];
           setAnomalies(anomaliesArray);
         } else {
-          console.warn('Failed to fetch anomalies, using fallback');
+          console.warn('Failed to fetch anomalies');
           setAnomalies([]);
         }
         
         // Handle overview response
-        if (overviewResponse.ok) {
+        if (overviewResponse && overviewResponse.ok) {
           const overviewData = await overviewResponse.json();
-          console.log('Overview data received:', overviewData);
           setOverview(overviewData);
         } else {
-          console.warn('Failed to fetch overview, using insights data as fallback');
+          console.warn('Failed to fetch overview');
           setOverview(null);
         }
       } catch (error) {
         console.error('Error fetching data:', error);
         // Don't completely fail if API is unavailable, show the page with sample data
         setError(error instanceof Error ? error.message : 'Failed to load data');
-        // Set some default data to prevent blank page
-        setInsights(null);
-        setAnomalies([]);
-        setOverview(null);
       } finally {
         setIsLoading(false);
       }
@@ -242,18 +256,6 @@ const Analysis: React.FC = () => {
     
     return categoryMap[category.toUpperCase()] || 
            category.charAt(0).toUpperCase() + category.slice(1).toLowerCase().replace(/_/g, ' ');
-  };
-
-  // Format anomaly type for display
-  const formatAnomalyType = (type: string): string => {
-    const typeMap: { [key: string]: string } = {
-      'spike': 'Release Spike',
-      'drop': 'Activity Drop',
-      'trend_change': 'Trend Shift',
-      'outlier': 'Unusual Activity',
-      'pattern_break': 'Pattern Break'
-    };
-    return typeMap[type?.toLowerCase()] || type || 'Pattern Detected';
   };
 
   // Chart data for Weekly Release Trend - using real data from overview API
@@ -455,23 +457,34 @@ const Analysis: React.FC = () => {
             {isLoading ? (
               <p className="insight-text" style={{ textAlign: 'left' }}>Loading patterns...</p>
             ) : anomalies && anomalies.length > 0 ? (
-              <p className="insight-text" style={{ textAlign: 'left' }}>
+              <div className="insight-text" style={{ textAlign: 'left', maxHeight: '140px', overflowY: 'auto' }}>
                 {(() => {
-                  // Get the most significant anomaly (highest severity or first one)
-                  const significantAnomaly = anomalies.find(a => a.severity === 'high') || anomalies[0];
-                  if (significantAnomaly) {
+                  // Get top 3 anomalies sorted by business_rank (lower rank = higher priority)
+                  // Filter out "Not ranked" items (business_rank = 999)
+                  const top3Anomalies = [...anomalies]
+                    .filter(a => a.business_rank < 999)
+                    .sort((a, b) => a.business_rank - b.business_rank)
+                    .slice(0, 3);
+
+                  if (top3Anomalies.length === 0) {
                     return (
-                      <>
-                        <strong className="highlight-teal">{formatAnomalyType(significantAnomaly.anomaly_type)}</strong>: {significantAnomaly.description || 'Anomaly detected in release patterns'}
-                        {significantAnomaly.recommendation && (
-                          <>. <em>{significantAnomaly.recommendation}</em></>
-                        )}
-                      </>
+                      <p style={{ margin: 0 }}>
+                        All <strong className="highlight-teal">competitors</strong> are showing consistent release patterns—market is stable with no significant anomalies detected.
+                      </p>
                     );
                   }
-                  return 'Multiple patterns detected across competitors—review for strategic insights.';
+
+                  return (
+                    <ul style={{ margin: 0, paddingLeft: '1.2em', listStyle: 'disc' }}>
+                      {top3Anomalies.map((anomaly, index) => (
+                        <li key={anomaly.id} style={{ marginBottom: index < top3Anomalies.length - 1 ? '0.75em' : 0 }}>
+                          <strong className="highlight-teal">{anomaly.feature.company_name}</strong> - {anomaly.feature.name}: {anomaly.business_reason}
+                        </li>
+                      ))}
+                    </ul>
+                  );
                 })()}
-              </p>
+              </div>
             ) : (
               <p className="insight-text" style={{ textAlign: 'left' }}>
                 All <strong className="highlight-teal">competitors</strong> are showing consistent release patterns—market is stable with no significant anomalies detected.
