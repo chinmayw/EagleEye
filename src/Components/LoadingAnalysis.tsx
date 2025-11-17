@@ -87,26 +87,8 @@ export function LoadingAnalysis({ companyId, onComplete }: LoadingAnalysisProps)
         );
 
         // Step 3: Categorizing new releases (Real API)
-        if (!isMounted) return;
-        try {
-          const classifyResponse = await fetch(`${baseURL}/features/classify-direct?require_threshold=false`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              // Add any required parameters here
-            })
-          });
-          
-          if (classifyResponse.ok) {
-            const classifyData = await classifyResponse.json();
-            console.log('Classification completed:', classifyData);
-          }
-        } catch (error) {
-          console.error('Step 3 API error:', error);
-          // Continue even if API fails
-        }
+        // Simulate step 3 (Categorizing new releases) with a delay
+        await new Promise(resolve => setTimeout(resolve, 1500));
         
         setProgress(75);
         setSteps(prevSteps =>
