@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { Radio, Check } from 'lucide-react';
+import { AUTH_HEADER } from '../constants/auth';
 import './LoadingAnalysis.css';
 
 interface LoadingAnalysisProps {
@@ -29,7 +30,7 @@ export function LoadingAnalysis({ companyId, onComplete }: LoadingAnalysisProps)
     let progressInterval: ReturnType<typeof setInterval> | null = null;
 
     const runAnalysis = async () => {
-      const baseURL = 'http://localhost:8000';
+      const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
       
       try {
         // Start progress bar animation
@@ -59,12 +60,16 @@ export function LoadingAnalysis({ companyId, onComplete }: LoadingAnalysisProps)
         if (!isMounted) return;
         try {
           const scrapeResponse = await fetch(
-            `${baseURL}/companies/${companyId}/scrape-and-summarize?force_crawl=false&use_langchain=false`,
+            `${baseURL}/process-company`,
             {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-              }
+                'Authorization': AUTH_HEADER
+              },
+              body: JSON.stringify({
+                company_id: '15'
+              })
             }
           );
           
@@ -87,26 +92,8 @@ export function LoadingAnalysis({ companyId, onComplete }: LoadingAnalysisProps)
         );
 
         // Step 3: Categorizing new releases (Real API)
-        if (!isMounted) return;
-        try {
-          const classifyResponse = await fetch(`${baseURL}/features/classify-direct?require_threshold=false`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              // Add any required parameters here
-            })
-          });
-          
-          if (classifyResponse.ok) {
-            const classifyData = await classifyResponse.json();
-            console.log('Classification completed:', classifyData);
-          }
-        } catch (error) {
-          console.error('Step 3 API error:', error);
-          // Continue even if API fails
-        }
+        // Simulate step 3 (Categorizing new releases) with a delay
+        await new Promise(resolve => setTimeout(resolve, 1500));
         
         setProgress(75);
         setSteps(prevSteps =>
@@ -119,17 +106,8 @@ export function LoadingAnalysis({ companyId, onComplete }: LoadingAnalysisProps)
 
         // Step 4: Building insights and trends (Real API)
         if (!isMounted) return;
-        try {
-          const anomaliesResponse = await fetch(`${baseURL}/analytics/anomalies-enhanced`);
-          
-          if (anomaliesResponse.ok) {
-            const anomaliesData = await anomaliesResponse.json();
-            console.log('Anomalies analysis completed:', anomaliesData);
-          }
-        } catch (error) {
-          console.error('Step 4 API error:', error);
-          // Continue even if API fails
-        }
+        // Simulate step 4 (Building insights and trends) with a delay
+        await new Promise(resolve => setTimeout(resolve, 1200));
         
         setProgress(100);
         setSteps(prevSteps =>

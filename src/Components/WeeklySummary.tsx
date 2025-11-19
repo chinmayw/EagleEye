@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { AUTH_HEADER } from '../constants/auth';
 import Summary, { type SummaryRef } from './Summary';
 import AlltimeInsights, { type AlltimeInsightsRef } from './AlltimeInsights';
 
@@ -40,7 +41,7 @@ interface InsightsData {
     release_count: number;
     last_week_releases?: number;
     change?: number;
-  };
+  } | null;
   trending_category: {
     category: string;
     current_week?: number;
@@ -50,7 +51,7 @@ interface InsightsData {
     total_releases?: number;
     current_month_releases?: number;
     last_month_releases?: number;
-  };
+  } | null;
   top_categories_current_week?: Array<{
     category: string;
     releases: number;
@@ -88,29 +89,55 @@ const WeeklySummary: React.FC = () => {
 
   // Fetch weekly insights data from API
   useEffect(() => {
+    let isMounted = true;
+    const abortController = new AbortController();
+    
     const fetchInsights = async () => {
       setIsLoading(true);
       setError(null);
       
       try {
-        const response = await fetch('http://localhost:8000/insights');
+        const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        console.log('[WeeklySummary] Fetching insights/weekly...');
+        const response = await fetch(`${baseURL}/insights/weekly`, {
+          signal: abortController.signal,
+          headers: {
+            'Authorization': AUTH_HEADER
+          }
+        });
         
         if (!response.ok) {
           throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
         }
         
         const data = await response.json();
-        console.log('Insights data received:', data);
-        setInsights(data);
+        console.log('[WeeklySummary] Insights data received:', data);
+        
+        if (isMounted) {
+          setInsights(data);
+        }
       } catch (error) {
-        console.error('Error fetching insights:', error);
-        setError(error instanceof Error ? error.message : 'Failed to load insights');
+        if (error instanceof Error && error.name === 'AbortError') {
+          console.log('[WeeklySummary] Fetch aborted');
+          return;
+        }
+        console.error('[WeeklySummary] Error fetching insights:', error);
+        if (isMounted) {
+          setError(error instanceof Error ? error.message : 'Failed to load insights');
+        }
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchInsights();
+    
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
   }, []);
 
   const handleDownloadPDF = () => {
