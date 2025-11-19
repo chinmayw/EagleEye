@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -8,6 +8,8 @@ import DataService from '../services/DataService';
 import type { EmailPayload } from '../services/DataService';
 import { useNotion } from '../context/NotionContext';
 import { EMAIL_BODY, EMAIL_SUBJECT, EMAIL_FILENAME } from '../constants/emailConstants';
+import { AUTH_HEADER } from '../constants/auth';
+import InsightsGrid from './InsightsGrid';
 
 interface Release {
   id: number;
@@ -34,6 +36,7 @@ const Releases: React.FC = () => {
   const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // State for releases data
   const [releases, setReleases] = useState<Release[]>([]);
@@ -96,6 +99,42 @@ const Releases: React.FC = () => {
     return diffDays <= 7;
   };
 
+  // Helper function to highlight matching search text
+  const highlightText = (text: string, query: string): React.ReactNode => {
+    if (!query.trim()) {
+      return text;
+    }
+
+    const parts = text.split(new RegExp(`(${query})`, 'gi'));
+    return (
+      <span style={{ display: 'inline' }}>
+        {parts.map((part, index) => 
+          part.toLowerCase() === query.toLowerCase() ? (
+            <mark 
+              key={index} 
+              style={{ 
+                backgroundColor: '#fde047', 
+                color: '#1a1a1a',
+                padding: '1px 0',
+                margin: '0',
+                fontWeight: '600',
+                borderRadius: '2px',
+                boxDecorationBreak: 'clone',
+                WebkitBoxDecorationBreak: 'clone',
+                display: 'inline',
+                lineHeight: 'inherit'
+              }}
+            >
+              {part}
+            </mark>
+          ) : (
+            <span key={index} style={{ display: 'inline' }}>{part}</span>
+          )
+        )}
+      </span>
+    );
+  };
+
   // Filter releases based on search query
   const filteredReleases = React.useMemo(() => {
     if (!searchQuery.trim()) {
@@ -129,61 +168,155 @@ const Releases: React.FC = () => {
   }, [itemsPerPage]);
 
   // Fetch releases data from API
-  useEffect(() => {
-    const fetchReleases = async () => {
-      setIsLoading(true);
-      setLoadError(null);
+  const fetchReleases = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    
+    try {
+      const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      console.log('[Releases] Fetching features...');
+      const response = await fetch(`${baseURL}/features?skip=0&limit=1000`, {
+        headers: {
+          'Authorization': AUTH_HEADER
+        }
+      });
       
-      try {
-        const response = await fetch('http://localhost:8000/features?skip=0&limit=1000');
-        
-        if (!response.ok) {
-          throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        
-        // Transform API data to match our Release interface
-        interface APIFeature {
-          id: number;
-          release_id: number;
-          name: string;
-          summary: string;
-          highlights?: string[];
-          category: string;
-          company_id: number;
-          company_name: string;
-          release_date: string;
-          version?: string | null;
-          assigned_category_id?: number | null;
-          category_confidence?: number | null;
-          created_at: string;
-        }
-        
-        const transformedReleases: Release[] = (data as APIFeature[]).map((item) => ({
-          id: item.id,
-          competitor: item.company_name,
-          competitorInitial: item.company_name.charAt(0).toUpperCase(),
-          competitorColor: getCompetitorColor(item.company_name),
-          feature: item.name,
-          summary: item.summary,
-          category: formatCategory(item.category),
-          priority: determinePriority(item.category),
-          date: formatDate(item.release_date)
-        }));
-        
-        setReleases(transformedReleases);
-      } catch (error) {
-        console.error('Error fetching releases:', error);
-        setLoadError(error instanceof Error ? error.message : 'Failed to load releases');
-        toast.error('Failed to load releases from API');
-      } finally {
-        setIsLoading(false);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
       }
-    };
-
-    fetchReleases();
+      
+      const data = await response.json();
+      console.log('[Releases] Features data received:', data.length, 'items');
+      
+      // Transform API data to match our Release interface
+      interface APIFeature {
+        id: number;
+        release_id: number;
+        name: string;
+        summary: string;
+        highlights?: string[];
+        category: string;
+        company_id: number;
+        company_name: string;
+        release_date: string;
+        version?: string | null;
+        assigned_category_id?: number | null;
+        category_confidence?: number | null;
+        created_at: string;
+      }
+      
+      const transformedReleases: Release[] = (data as APIFeature[]).map((item) => ({
+        id: item.id,
+        competitor: item.company_name,
+        competitorInitial: item.company_name.charAt(0).toUpperCase(),
+        competitorColor: getCompetitorColor(item.company_name),
+        feature: item.name,
+        summary: item.summary,
+        category: formatCategory(item.category),
+        priority: determinePriority(item.category),
+        date: formatDate(item.release_date)
+      }));
+      
+      setReleases(transformedReleases);
+    } catch (error) {
+      console.error('[Releases] Error fetching releases:', error);
+      setLoadError(error instanceof Error ? error.message : 'Failed to load releases');
+      toast.error('Failed to load releases from API');
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchReleases();
+  }, [fetchReleases]);
+
+  // Refresh releases list after re-run
+  const refreshReleases = async () => {
+    console.log('[Releases] Refreshing releases data...');
+    await fetchReleases();
+  };
+
+  // Re-run analysis handler
+  const handleRerunAnalysis = async () => {
+    if (releases.length === 0) {
+      toast.warning('No data to analyze. Please add a company first.');
+      return;
+    }
+
+    setIsAnalyzing(true);
+    const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    const toastId = toast.info('Starting analysis...', { autoClose: false });
+
+    try {
+      // Get first company from API
+      const companiesResponse = await fetch(`${baseURL}/companies?skip=0&limit=1`, {
+        headers: {
+          'Authorization': AUTH_HEADER
+        }
+      });
+      
+      if (!companiesResponse.ok) {
+        throw new Error('Failed to fetch companies');
+      }
+
+      const companies = await companiesResponse.json();
+      
+      if (companies.length === 0) {
+        toast.update(toastId, {
+          render: 'No companies found to analyze',
+          type: 'error',
+          autoClose: 5000
+        });
+        return;
+      }
+
+      const targetCompanyId = companies[0].id;
+
+      // Call process-company API
+      toast.update(toastId, { render: 'Processing company data...' });
+      const processResponse = await fetch(
+        `${baseURL}/process-company`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': AUTH_HEADER
+          },
+          body: JSON.stringify({
+            company_id: targetCompanyId.toString()
+          })
+        }
+      );
+      
+      if (processResponse.ok) {
+        const processData = await processResponse.json();
+        console.log('✓ Company processing completed:', processData);
+        
+        // Success - refresh data
+        toast.update(toastId, {
+          render: 'Re-run successful! Refreshing data...',
+          type: 'success',
+          autoClose: 2000
+        });
+
+        await refreshReleases();
+        
+        toast.success('Analysis complete and data refreshed!');
+      } else {
+        throw new Error('Failed to process company');
+      }
+    } catch (error) {
+      console.error('[Releases] Re-run analysis error:', error);
+      toast.update(toastId, {
+        render: 'Analysis failed. Please try again.',
+        type: 'error',
+        autoClose: 5000
+      });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   const handleConnectNotion = async () => {
     if (!isConnected) {
@@ -539,6 +672,28 @@ const Releases: React.FC = () => {
       {/* Main Content - Only show when not loading and no error */}
       {!isLoading && !loadError && (
         <>
+      {/* Insights Section */}
+      <div className="section-header" style={{ marginBottom: '24px', marginTop: '24px', textAlign: 'left' }}>
+        <h3 style={{ fontSize: '1.25rem', fontWeight: '600', color: '#1a1a1a', marginBottom: '8px', textAlign: 'left' }}>
+          Key Insights
+        </h3>
+        <p style={{ fontSize: '0.875rem', color: '#6b7280', textAlign: 'left' }}>
+          Market intelligence at a glance
+        </p>
+      </div>
+
+      <InsightsGrid />
+
+      {/* Releases Section */}
+      <div className="section-header" style={{ marginBottom: '20px', marginTop: '40px', textAlign: 'left' }}>
+        <h3 style={{ fontSize: '1.25rem', fontWeight: '600', color: '#1a1a1a', marginBottom: '8px', textAlign: 'left' }}>
+          Release Tracker
+        </h3>
+        <p style={{ fontSize: '0.875rem', color: '#6b7280', textAlign: 'left' }}>
+          All competitor feature releases and updates
+        </p>
+      </div>
+
       {/* Search and Re-run Bar */}
       <div className="search-bar-container">
         <div className="search-input-wrapper">
@@ -554,13 +709,49 @@ const Releases: React.FC = () => {
             className="search-input"
           />
         </div>
-        <button className="rerun-button">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M14 8C14 11.3137 11.3137 14 8 14C4.68629 14 2 11.3137 2 8C2 4.68629 4.68629 2 8 2C10.2091 2 12.1046 3.13258 13.1244 4.83337" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-            <path d="M14 2V5H11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-          Re-run Analysis
-        </button>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button 
+            className="inline-action-button"
+            onClick={() => navigate('/onboarding?step=1')}
+            disabled={isAnalyzing}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+            Add Company
+          </button>
+          <button 
+            className="inline-action-button"
+            onClick={() => navigate('/onboarding?step=2')}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+            Add Category
+          </button>
+          <button 
+            className="rerun-button"
+            onClick={handleRerunAnalysis}
+            disabled={isAnalyzing}
+          >
+            {isAnalyzing ? (
+              <>
+                <svg className="spinning" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeDasharray="9.42 9.42" strokeLinecap="round"/>
+                </svg>
+                Analyzing...
+              </>
+            ) : (
+              <>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M14 8C14 11.3137 11.3137 14 8 14C4.68629 14 2 11.3137 2 8C2 4.68629 4.68629 2 8 2C10.2091 2 12.1046 3.13258 13.1244 4.83337" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  <path d="M14 2V5H11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Re-run Analysis
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Sync Status Message */}
@@ -656,16 +847,16 @@ const Releases: React.FC = () => {
                         {release.competitorInitial}
                       </div>
                       <div className="competitor-info">
-                        <span className="competitor-name">{release.competitor}</span>
+                        <span className="competitor-name">{highlightText(release.competitor, searchQuery)}</span>
                         {isNewRelease(release.date) && (
                           <span className="new-badge">New</span>
                         )}
                       </div>
                     </div>
                   </td>
-                  <td className="feature-cell">{release.feature}</td>
-                  <td className="summary-cell">{release.summary}</td>
-                  <td className="category-cell">{release.category}</td>
+                  <td className="feature-cell">{highlightText(release.feature, searchQuery)}</td>
+                  <td className="summary-cell">{highlightText(release.summary, searchQuery)}</td>
+                  <td className="category-cell">{highlightText(release.category, searchQuery)}</td>
                   <td className="date-cell">{release.date}</td>
                 </tr>
               ))
