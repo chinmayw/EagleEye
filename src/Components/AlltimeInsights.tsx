@@ -1,10 +1,11 @@
-import React, { useRef, forwardRef, useImperativeHandle } from 'react';
+import { useRef, forwardRef, useImperativeHandle } from 'react';
 
 export type AlltimeInsightsRef = {
   downloadPDF: () => Promise<void>;
 }
 
-const AlltimeInsights = forwardRef<AlltimeInsightsRef>((props, ref) => {
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+const AlltimeInsights = forwardRef<AlltimeInsightsRef, {}>((_props, ref) => {
   const alltimeContentRef = useRef<HTMLDivElement>(null);
 
   const handleDownloadPDF = async () => {
