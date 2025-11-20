@@ -64,13 +64,39 @@ export function OnboardingFlow({ onComplete, initialStep = 1 }: OnboardingFlowPr
         setLoading(true);
         
         const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        console.log('[OnboardingFlow] Using API URL:', baseURL);
+        console.log('[OnboardingFlow] AUTH_HEADER:', AUTH_HEADER);
+        
+        // Test API connectivity first
+        try {
+          const testResponse = await fetch(`${baseURL}/health`, {
+            headers: {
+              'Authorization': AUTH_HEADER
+            }
+          });
+          console.log('[OnboardingFlow] Health check response:', testResponse.status, testResponse.statusText);
+        } catch (healthError) {
+          console.error('[OnboardingFlow] Health check failed:', healthError);
+          alert(`Cannot connect to API server at ${baseURL}. Please make sure the API server is running and accessible.`);
+          setLoading(false);
+          return;
+        }
         
         // Fetch companies
+        console.log('[OnboardingFlow] Fetching companies from:', `${baseURL}/companies?skip=0&limit=100`);
         const companiesResponse = await fetch(`${baseURL}/companies?skip=0&limit=100`, {
           headers: {
-            'Authorization': AUTH_HEADER
+            'Authorization': AUTH_HEADER,
+            'Content-Type': 'application/json'
           }
         });
+        
+        console.log('[OnboardingFlow] Companies response status:', companiesResponse.status, companiesResponse.statusText);
+        
+        if (!companiesResponse.ok) {
+          throw new Error(`Companies API failed: ${companiesResponse.status} ${companiesResponse.statusText}`);
+        }
+        
         const companiesData = await companiesResponse.json();
         console.log('[OnboardingFlow] Fetched companies:', companiesData);
         
@@ -89,11 +115,20 @@ export function OnboardingFlow({ onComplete, initialStep = 1 }: OnboardingFlowPr
         setInitialCompetitorCount(mappedCompetitors.length > 0 ? mappedCompetitors.length : 0);
 
         // Fetch categories
+        console.log('[OnboardingFlow] Fetching categories from:', `${baseURL}/categories`);
         const categoriesResponse = await fetch(`${baseURL}/categories`, {
           headers: {
-            'Authorization': AUTH_HEADER
+            'Authorization': AUTH_HEADER,
+            'Content-Type': 'application/json'
           }
         });
+        
+        console.log('[OnboardingFlow] Categories response status:', categoriesResponse.status, categoriesResponse.statusText);
+        
+        if (!categoriesResponse.ok) {
+          throw new Error(`Categories API failed: ${categoriesResponse.status} ${categoriesResponse.statusText}`);
+        }
+        
         const categoriesData = await categoriesResponse.json();
         
         // Handle both response formats: array or {categories: array}
@@ -120,10 +155,31 @@ export function OnboardingFlow({ onComplete, initialStep = 1 }: OnboardingFlowPr
         
         setLoading(false);
       } catch (error) {
-        console.error('Error fetching data:', error);
+        console.error('[OnboardingFlow] Error fetching data:', error);
+        
+        // Show detailed error message to help with debugging
+        let errorMessage = 'Failed to load data from API server.';
+        if (error instanceof Error) {
+          if (error.message.includes('Failed to fetch')) {
+            errorMessage = `Cannot connect to API server at ${import.meta.env.VITE_API_URL || 'http://localhost:8000'}. Please ensure:\n\n1. The API server is running on port 8000\n2. CORS is configured to allow requests from ${window.location.origin}\n3. The API server is accessible from your browser`;
+          } else {
+            errorMessage = `API Error: ${error.message}`;
+          }
+        }
+        
+        alert(errorMessage);
+        
         // Start with empty arrays if fetch fails
         setCompetitors([]);
-        setCategories([]);
+        setCategories([
+          { id: '1', name: 'Appointments' },
+          { id: '2', name: 'Analytics' }
+        ]);
+        setInitialCategoryCount(2);
+        setOriginalCategories([
+          { id: '1', name: 'Appointments' },
+          { id: '2', name: 'Analytics' }
+        ]);
         setLoading(false);
       }
     };
