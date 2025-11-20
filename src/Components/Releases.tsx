@@ -353,8 +353,10 @@ const Releases: React.FC = () => {
     try {
       console.log('[Releases] Calling Notion sync API...');
       
-      // Use relative URL if in development with Vite proxy, otherwise use full URL  
-      const syncUrl = import.meta.env.DEV ? '/api/notion/sync-releases' : 'http://localhost:8000/api/notion/sync-releases';
+      // Use relative URL if in development with Vite proxy, otherwise use VITE_API_URL from .env
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const syncUrl = import.meta.env.DEV ? '/api/notion/sync-releases' : `${apiUrl}/api/notion/sync-releases`;
+      console.log('[Releases] API URL from .env:', import.meta.env.VITE_API_URL);
       console.log('[Releases] Sync URL:', syncUrl);
       
       const response = await fetch(syncUrl, {
