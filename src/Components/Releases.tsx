@@ -6,7 +6,6 @@ import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import DataService from '../services/DataService';
 import type { EmailPayload } from '../services/DataService';
-import { useNotion } from '../context/NotionContext';
 import { EMAIL_BODY, EMAIL_SUBJECT, EMAIL_FILENAME } from '../constants/emailConstants';
 import { AUTH_HEADER } from '../constants/auth';
 import InsightsGrid from './InsightsGrid';
@@ -37,11 +36,11 @@ interface APIFeature {
   assigned_category_id?: number | null;
   category_confidence?: number | null;
   created_at: string;
+  synced_to_notion: boolean;
 }
 
 const Releases: React.FC = () => {
   const navigate = useNavigate();
-  const { isConnected } = useNotion();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
@@ -49,7 +48,7 @@ const Releases: React.FC = () => {
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const tableFooterRef = useRef<HTMLDivElement>(null);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'error' | 'info', text: string } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -347,12 +346,6 @@ const Releases: React.FC = () => {
   };
 
   const handleConnectNotion = async () => {
-    if (!isConnected) {
-      // Navigate to connect page if not connected
-      navigate('/connect-notion');
-      return;
-    }
-
     // Sync releases to Notion if already connected
     setIsSyncing(true);
     setSyncMessage(null);
@@ -459,6 +452,59 @@ const Releases: React.FC = () => {
 
   const handleSendEmailClick = () => {
     setShowEmailModal(true);
+  };
+
+  const handleExportCSV = () => {
+    if (filteredReleases.length === 0) {
+      toast.info('No data to export');
+      return;
+    }
+
+    // CSV header
+    const headers = ['Competitor', 'Feature', 'Summary', 'Category', 'Date'];
+    
+    // Helper function to escape CSV values
+    const escapeCSV = (value: string): string => {
+      if (value == null) return '';
+      const stringValue = String(value);
+      // If value contains comma, quote, or newline, wrap in quotes and escape existing quotes
+      if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+        return `"${stringValue.replace(/"/g, '""')}"`;
+      }
+      return stringValue;
+    };
+
+    // Create CSV rows
+    const csvRows = [
+      headers.join(','), // Header row
+      ...filteredReleases.map(release => [
+        escapeCSV(release.competitor),
+        escapeCSV(release.feature),
+        escapeCSV(release.summary),
+        escapeCSV(release.category),
+        escapeCSV(release.date)
+      ].join(','))
+    ];
+
+    // Combine all rows
+    const csvContent = csvRows.join('\n');
+
+    // Create blob and download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    // Generate filename with timestamp
+    const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    link.setAttribute('href', url);
+    link.setAttribute('download', `releases_${timestamp}.csv`);
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast.success(`Exported ${filteredReleases.length} releases to CSV`);
   };
 
   const handleCloseModal = () => {
@@ -881,10 +927,16 @@ const Releases: React.FC = () => {
               <circle cx="10" cy="10" r="9" fill="#10b981" />
               <path d="M6 10L8.5 12.5L14 7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-          ) : (
+          ) : syncMessage.type === 'error' ? (
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
               <circle cx="10" cy="10" r="9" fill="#ef4444" />
               <path d="M7 7L13 13M7 13L13 7" stroke="white" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          ) : (
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <circle cx="10" cy="10" r="9" fill="#3b82f6" />
+              <circle cx="10" cy="6" r="1" fill="white" />
+              <path d="M10 9V14" stroke="white" strokeWidth="2" strokeLinecap="round" />
             </svg>
           )}
           <span>{syncMessage.text}</span>
@@ -903,7 +955,7 @@ const Releases: React.FC = () => {
           className="action-btn secondary-btn" 
           onClick={handleConnectNotion}
           disabled={isSyncing}
-          title={isConnected ? 'Sync releases to Notion' : 'Connect to Notion first'}
+          title={'Sync releases to Notion'}
         >
           {isSyncing ? (
             <>
@@ -918,7 +970,7 @@ const Releases: React.FC = () => {
                 <rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.5"/>
                 <text x="8" y="11" fontSize="8" fontWeight="700" textAnchor="middle" fill="currentColor" fontFamily="system-ui">N</text>
               </svg>
-              {isConnected ? 'Sync Notion' : 'Connect Notion'}
+              {'Sync Notion'}
             </>
           )}
         </button>
@@ -933,7 +985,10 @@ const Releases: React.FC = () => {
           </svg>
           Send Email
         </button>
-        <button className="action-btn secondary-btn">
+        <button 
+          className="action-btn secondary-btn"
+          onClick={handleExportCSV}
+        >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M13 8V13H3V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M8 3V10M8 10L5.5 7.5M8 10L10.5 7.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
