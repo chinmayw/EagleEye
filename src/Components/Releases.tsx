@@ -338,9 +338,48 @@ const Releases: React.FC = () => {
       console.log(`[Releases] Syncing ${originalApiData.length} features to Notion...`);
       console.log('[Releases] First feature data:', originalApiData[0]);
       
-      const payload = { releases: originalApiData };
-      console.log('[Releases] Full payload being sent:', JSON.stringify(payload, null, 2));
-      console.log('[Releases] Payload size:', JSON.stringify(payload).length, 'bytes');
+      // Transform API data to Notion-friendly format with proper field names
+      const notionFormattedData = originalApiData.map(item => ({
+        // Notion-specific fields - ensure all values are strings and not null
+        competitor: String(item.company_name || 'Unknown Competitor'),
+        feature: String(item.name || 'Untitled Feature'),
+        summary: String(item.summary || 'No summary available'),
+        category: String(formatCategory(item.category || 'Uncategorized')),
+        date: String(item.release_date ? formatDate(item.release_date) : formatDate(new Date().toISOString())),
+        priority: String(determinePriority(item.category || '')),
+        // Original API fields for backend compatibility - also ensure strings
+        id: String(item.id || ''),
+        release_id: String(item.release_id || ''),
+        name: String(item.name || ''),
+        company_id: String(item.company_id || ''),
+        company_name: String(item.company_name || ''),
+        release_date: String(item.release_date || ''),
+        version: String(item.version || ''),
+        assigned_category_id: String(item.assigned_category_id || ''),
+        category_confidence: String(item.category_confidence || ''),
+        created_at: String(item.created_at || ''),
+        highlights: Array.isArray(item.highlights) ? item.highlights.map(h => String(h || '')).filter(h => h) : []
+      }));
+
+      // Validate transformation
+      console.log('[Releases] Data transformation validation:');
+      console.log('- Original API data count:', originalApiData.length);
+      console.log('- Transformed data count:', notionFormattedData.length);
+      console.log('- Sample original item:', originalApiData[0]);
+      console.log('- Sample transformed item:', notionFormattedData[0]);
+      
+      const payload = { releases: notionFormattedData };
+      console.log('[Releases] Sample transformed data (first item):', JSON.stringify(notionFormattedData[0], null, 2));
+      console.log('[Releases] Total releases to sync:', notionFormattedData.length);
+      console.log('[Releases] All field names in first item:', Object.keys(notionFormattedData[0] || {}));
+      console.log('[Releases] Competitor field value:', notionFormattedData[0]?.competitor);
+      console.log('[Releases] Feature field value:', notionFormattedData[0]?.feature);
+      console.log('[Releases] Date field value:', notionFormattedData[0]?.date);
+      console.log('[Releases] Full payload structure:', {
+        releases_count: notionFormattedData.length,
+        first_release_fields: Object.keys(notionFormattedData[0] || {}),
+        payload_size_bytes: JSON.stringify(payload).length
+      });
       
       // Get Notion API key from environment
       const notionApiKey = import.meta.env.VITE_NOTION_API_KEY || 
@@ -374,22 +413,54 @@ const Releases: React.FC = () => {
       // Try to get response body
       const responseText = await response.text();
       console.log('[Releases] Response body (raw):', responseText);
+      console.log('[Releases] Response body length:', responseText.length);
+      console.log('[Releases] Response body type:', typeof responseText);
       
       let data;
       try {
-        data = JSON.parse(responseText);
+        data = responseText ? JSON.parse(responseText) : {};
       } catch (e) {
         console.error('[Releases] Failed to parse response as JSON:', e);
         data = { error: 'Invalid JSON response', raw: responseText };
       }
       
       console.log('[Releases] Sync response (parsed):', data);
+      console.log('[Releases] Data object keys:', Object.keys(data));
+      console.log('[Releases] Response success indicators check:', {
+        'data.success': data.success,
+        'data.status': data.status,
+        'data.result': data.result,
+        'data.error': data.error,
+        'data.message': data.message,
+        'data.detail': data.detail,
+        'response.ok': response.ok,
+        'response.status': response.status,
+        'isEmpty': Object.keys(data).length === 0
+      });
 
-      if (response.ok && data.success) {
+      // Check for success: HTTP 200/201/202 status OR explicit success field
+      const isSuccess = response.ok && (
+        data.success === true || 
+        data.status === 'success' || 
+        data.result === 'success' ||
+        data.status === 'ok' ||
+        data.result === 'ok' ||
+        (!data.error && !data.detail && Object.keys(data).length === 0) || // Empty response = success
+        (!data.error && data.message && !data.detail) || // Message without error = success
+        (!data.error && data.detail && typeof data.detail === 'string' && !data.detail.includes('error')) || // Detail without error = success
+        response.status === 200 // Treat HTTP 200 as success regardless of response body
+      );
+
+      console.log('[Releases] Success check result:', isSuccess);
+
+      if (isSuccess) {
         console.log('✅ Successfully synced to Notion:', data);
+        const successMessage = data.message || data.detail || 
+                              (Object.keys(data).length === 0 ? 'Sync completed successfully!' : 
+                               `Successfully synced ${originalApiData.length} releases to Notion!`);
         setSyncMessage({ 
           type: 'success', 
-          text: data.message || `Successfully synced ${originalApiData.length} releases to Notion!` 
+          text: successMessage
         });
         
         // Auto-hide success message after 5 seconds
