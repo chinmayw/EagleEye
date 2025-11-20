@@ -13,57 +13,30 @@ const ConnectToNotion: React.FC = () => {
 
   const exchangeCodeForToken = useCallback(async (code: string) => {
     try {
-      console.log('Exchanging code for token...', code);
+      console.log('OAuth code received:', code);
       
-      // Send code to backend to exchange for access token
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-      const response = await fetch(`${backendUrl}/api/notion/exchange-token`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ code }),
-      });
+      // Note: Backend token exchange has been removed
+      // This is now a simplified frontend-only OAuth flow
+      // In a real implementation, you would need a backend service to securely exchange the code
       
-      console.log('Response status:', response.status);
-
-      const data = await response.json();
+      console.log('✅ OAuth code received successfully!');
+      setConnectionStatus('success');
+      setIsConnected(true); // Mark Notion as connected
       
-      console.log('Backend response:', data);
-
-      if (response.ok && data.success) {
-        // Success - show success message and redirect
-        console.log('✅ Successfully connected to Notion!');
-        setConnectionStatus('success');
-        setIsConnected(true); // Mark Notion as connected
-        // Remove code from URL and add success param
-        window.history.replaceState({}, '', '/connect-notion?success=true');
-        
-        // Auto-navigate to dashboard after 2 seconds
-        setTimeout(() => {
-          navigate('/onboarding');
-        }, 2000);
-      } else {
-        // Error from backend
-        console.error('❌ Backend returned error:', data);
-        setConnectionStatus('error');
-        setErrorMessage(data.error || 'Failed to connect to Notion');
-        if (data.details) {
-          console.error('Error details:', data.details);
-        }
-        // Remove code from URL
-        window.history.replaceState({}, '', '/connect-notion?error=auth_failed');
-      }
+      // Remove code from URL and add success param
+      window.history.replaceState({}, '', '/connect-notion?success=true');
+      
+      // Auto-navigate to dashboard after 2 seconds
+      setTimeout(() => {
+        navigate('/onboarding');
+      }, 2000);
+      
     } catch (error) {
-      console.error('Error exchanging code for token:', error);
-      console.error('Error details:', {
-        message: error instanceof Error ? error.message : 'Unknown error',
-        error
-      });
+      console.error('Error in OAuth flow:', error);
       setConnectionStatus('error');
-      setErrorMessage(`Network error: ${error instanceof Error ? error.message : 'Cannot connect to backend. Make sure the backend server is running on http://localhost:5000'}`);
+      setErrorMessage(`OAuth error: ${error instanceof Error ? error.message : 'Failed to complete OAuth flow. This is a frontend-only demo.'}`);
       // Remove code from URL
-      window.history.replaceState({}, '', '/connect-notion?error=network_error');
+      window.history.replaceState({}, '', '/connect-notion?error=oauth_error');
     }
   }, [navigate, setIsConnected]);
 

@@ -21,21 +21,9 @@ export const NotionProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   }, []);
 
   useEffect(() => {
-    // Optionally check with backend on mount
-    const checkConnectionStatus = async () => {
-      try {
-        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-        const response = await fetch(`${backendUrl}/api/notion/status`);
-        const data = await response.json();
-        if (data.connected) {
-          setIsConnected(true);
-        }
-      } catch (error) {
-        console.log('Could not check Notion connection status');
-      }
-    };
-
-    checkConnectionStatus();
+    // Note: Backend status checking has been removed since this is now a frontend-only app
+    // Connection status is managed entirely through localStorage
+    console.log('Notion connection status loaded from localStorage:', isConnected);
   }, [setIsConnected]);
 
   return (
