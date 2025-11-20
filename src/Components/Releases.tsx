@@ -350,14 +350,30 @@ const Releases: React.FC = () => {
     setIsSyncing(true);
     setSyncMessage(null);
 
+    // Use relative URL if in development with Vite proxy, otherwise use VITE_API_URL from .env
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    const syncUrl = import.meta.env.DEV ? '/api/notion/sync-releases' : `${apiUrl}/api/notion/sync-releases`;
+
     try {
       console.log('[Releases] Calling Notion sync API...');
-      
-      // Use relative URL if in development with Vite proxy, otherwise use VITE_API_URL from .env
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-      const syncUrl = import.meta.env.DEV ? '/api/notion/sync-releases' : `${apiUrl}/api/notion/sync-releases`;
       console.log('[Releases] API URL from .env:', import.meta.env.VITE_API_URL);
       console.log('[Releases] Sync URL:', syncUrl);
+      
+      // Test API connectivity in production
+      if (!import.meta.env.DEV) {
+        console.log('[Releases] Testing API connectivity...');
+        try {
+          const healthUrl = `${apiUrl}/health`;
+          const healthResponse = await fetch(healthUrl, { method: 'GET' });
+          console.log('[Releases] Health check response:', healthResponse.status);
+          if (!healthResponse.ok) {
+            throw new Error(`Health check failed: ${healthResponse.status}`);
+          }
+        } catch (healthError) {
+          console.error('[Releases] Health check failed:', healthError);
+          throw new Error(`Cannot reach API server at ${apiUrl}. Health check failed.`);
+        }
+      }
       
       const response = await fetch(syncUrl, {
         method: 'POST',
@@ -443,9 +459,29 @@ const Releases: React.FC = () => {
       }
     } catch (error) {
       console.error('❌ Network error:', error);
+      console.error('[Releases] Environment details:', {
+        DEV: import.meta.env.DEV,
+        VITE_API_URL: import.meta.env.VITE_API_URL,
+        syncUrl,
+        origin: window.location.origin,
+        userAgent: navigator.userAgent.includes('Vercel') ? 'Vercel' : 'Local'
+      });
+      
+      let errorMessage = 'Network error. ';
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        errorMessage += `Cannot connect to ${syncUrl}. `;
+        if (import.meta.env.DEV) {
+          errorMessage += 'Make sure backend is running on localhost:8000.';
+        } else {
+          errorMessage += `Make sure API server at ${import.meta.env.VITE_API_URL} is accessible and CORS is configured for ${window.location.origin}.`;
+        }
+      } else {
+        errorMessage += 'Make sure backend is running.';
+      }
+      
       setSyncMessage({ 
         type: 'error', 
-        text: 'Network error. Make sure backend is running.' 
+        text: errorMessage
       });
     } finally {
       setIsSyncing(false);
