@@ -56,8 +56,6 @@ const Releases: React.FC = () => {
 
   // State for releases data
   const [releases, setReleases] = useState<Release[]>([]);
-  // Store original API data for syncing to external services
-  const [originalApiData, setOriginalApiData] = useState<APIFeature[]>([]);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -191,9 +189,37 @@ const Releases: React.FC = () => {
     setLoadError(null);
     
     try {
-      const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-      console.log('[Releases] Fetching features...');
-      const response = await fetch(`${baseURL}/features?skip=0&limit=1000`, {
+      // Use relative URL if in development with Vite proxy, otherwise use full URL
+      const baseURL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || 'http://localhost:8000');
+      const healthUrl = baseURL ? `${baseURL}/health` : '/health';
+      const featuresUrl = baseURL ? `${baseURL}/features?skip=0&limit=1000` : '/features?skip=0&limit=1000';
+      
+      console.log('[Releases] Fetching features from:', featuresUrl);
+      console.log('[Releases] Development mode:', import.meta.env.DEV);
+      
+      // Test API connectivity first
+      try {
+        console.log('[Releases] Testing connection to:', healthUrl);
+        const testResponse = await fetch(healthUrl, {
+          headers: {
+            'Authorization': AUTH_HEADER
+          }
+        });
+        console.log('[Releases] Health check response:', testResponse.status, testResponse.statusText);
+        
+        if (!testResponse.ok) {
+          throw new Error(`Health check failed: ${testResponse.status} ${testResponse.statusText}`);
+        }
+      } catch (healthError) {
+        console.error('[Releases] Health check failed:', healthError);
+        if (healthError instanceof TypeError && healthError.message.includes('Failed to fetch')) {
+          throw new Error(`Cannot connect to API server at ${baseURL || 'localhost:8000'}. Please ensure:\n\n1. The API server is running on port 8000\n2. The server is accessible from your browser\n3. CORS is configured to allow requests from ${window.location.origin}`);
+        } else {
+          throw new Error(`API server health check failed: ${healthError instanceof Error ? healthError.message : 'Unknown error'}`);
+        }
+      }
+      
+      const response = await fetch(featuresUrl, {
         headers: {
           'Authorization': AUTH_HEADER
         }
@@ -205,9 +231,6 @@ const Releases: React.FC = () => {
       
       const data = await response.json();
       console.log('[Releases] Features data received:', data.length, 'items');
-      
-      // Store original API data for syncing to external services
-      setOriginalApiData(data);
       
       // Transform API data to match our Release interface
       const transformedReleases: Release[] = (data as APIFeature[]).map((item) => ({
@@ -335,76 +358,18 @@ const Releases: React.FC = () => {
     setSyncMessage(null);
 
     try {
-      console.log(`[Releases] Syncing ${originalApiData.length} features to Notion...`);
-      console.log('[Releases] First feature data:', originalApiData[0]);
+      console.log('[Releases] Calling Notion sync API...');
       
-      // Transform API data to Notion-friendly format with proper field names
-      const notionFormattedData = originalApiData.map(item => ({
-        // Notion-specific fields - ensure all values are strings and not null
-        competitor: String(item.company_name || 'Unknown Competitor'),
-        feature: String(item.name || 'Untitled Feature'),
-        summary: String(item.summary || 'No summary available'),
-        category: String(formatCategory(item.category || 'Uncategorized')),
-        date: String(item.release_date ? formatDate(item.release_date) : formatDate(new Date().toISOString())),
-        priority: String(determinePriority(item.category || '')),
-        // Original API fields for backend compatibility - also ensure strings
-        id: String(item.id || ''),
-        release_id: String(item.release_id || ''),
-        name: String(item.name || ''),
-        company_id: String(item.company_id || ''),
-        company_name: String(item.company_name || ''),
-        release_date: String(item.release_date || ''),
-        version: String(item.version || ''),
-        assigned_category_id: String(item.assigned_category_id || ''),
-        category_confidence: String(item.category_confidence || ''),
-        created_at: String(item.created_at || ''),
-        highlights: Array.isArray(item.highlights) ? item.highlights.map(h => String(h || '')).filter(h => h) : []
-      }));
-
-      // Validate transformation
-      console.log('[Releases] Data transformation validation:');
-      console.log('- Original API data count:', originalApiData.length);
-      console.log('- Transformed data count:', notionFormattedData.length);
-      console.log('- Sample original item:', originalApiData[0]);
-      console.log('- Sample transformed item:', notionFormattedData[0]);
+      // Use relative URL if in development with Vite proxy, otherwise use full URL  
+      const syncUrl = import.meta.env.DEV ? '/api/notion/sync-releases' : 'http://localhost:8000/api/notion/sync-releases';
+      console.log('[Releases] Sync URL:', syncUrl);
       
-      const payload = { releases: notionFormattedData };
-      console.log('[Releases] Sample transformed data (first item):', JSON.stringify(notionFormattedData[0], null, 2));
-      console.log('[Releases] Total releases to sync:', notionFormattedData.length);
-      console.log('[Releases] All field names in first item:', Object.keys(notionFormattedData[0] || {}));
-      console.log('[Releases] Competitor field value:', notionFormattedData[0]?.competitor);
-      console.log('[Releases] Feature field value:', notionFormattedData[0]?.feature);
-      console.log('[Releases] Date field value:', notionFormattedData[0]?.date);
-      console.log('[Releases] Full payload structure:', {
-        releases_count: notionFormattedData.length,
-        first_release_fields: Object.keys(notionFormattedData[0] || {}),
-        payload_size_bytes: JSON.stringify(payload).length
-      });
-      
-      // Get Notion API key from environment
-      const notionApiKey = import.meta.env.VITE_NOTION_API_KEY || 
-                          import.meta.env.VITE_NOTION_INTEGRATION_TOKEN || '';
-      
-      console.log('[Releases] Notion API Key present:', notionApiKey ? 'YES' : 'NO');
-      
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'Authorization': AUTH_HEADER,
-      };
-      
-      // Add Notion API key if available
-      if (notionApiKey) {
-        headers['X-Notion-Key'] = notionApiKey;
-        headers['Notion-Api-Key'] = notionApiKey;
-        headers['x-notion-integration-token'] = notionApiKey;
-      }
-      
-      console.log('[Releases] Request headers:', headers);
-      
-      const response = await fetch('http://localhost:8000/api/notion/sync-releases', {
+      const response = await fetch(syncUrl, {
         method: 'POST',
-        headers: headers,
-        body: JSON.stringify(payload),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': AUTH_HEADER
+        }
       });
 
       console.log('[Releases] Response status:', response.status, response.statusText);
@@ -426,17 +391,6 @@ const Releases: React.FC = () => {
       
       console.log('[Releases] Sync response (parsed):', data);
       console.log('[Releases] Data object keys:', Object.keys(data));
-      console.log('[Releases] Response success indicators check:', {
-        'data.success': data.success,
-        'data.status': data.status,
-        'data.result': data.result,
-        'data.error': data.error,
-        'data.message': data.message,
-        'data.detail': data.detail,
-        'response.ok': response.ok,
-        'response.status': response.status,
-        'isEmpty': Object.keys(data).length === 0
-      });
 
       // Check for success: HTTP 200/201/202 status OR explicit success field
       const isSuccess = response.ok && (
@@ -457,7 +411,7 @@ const Releases: React.FC = () => {
         console.log('✅ Successfully synced to Notion:', data);
         const successMessage = data.message || data.detail || 
                               (Object.keys(data).length === 0 ? 'Sync completed successfully!' : 
-                               `Successfully synced ${originalApiData.length} releases to Notion!`);
+                               'Successfully synced releases to Notion!');
         setSyncMessage({ 
           type: 'success', 
           text: successMessage
@@ -777,29 +731,60 @@ const Releases: React.FC = () => {
       {/* Error State */}
       {loadError && !isLoading && (
         <div style={{ 
-          padding: '20px', 
+          padding: '30px', 
           backgroundColor: '#fee2e2', 
           color: '#dc2626',
           borderRadius: '8px',
           margin: '20px',
-          textAlign: 'center'
+          textAlign: 'center',
+          maxWidth: '600px',
+          marginLeft: 'auto',
+          marginRight: 'auto'
         }}>
-          <p style={{ fontWeight: 'bold', marginBottom: '10px' }}>Failed to load releases</p>
-          <p style={{ fontSize: '14px', marginBottom: '15px' }}>{loadError}</p>
-          <button 
-            onClick={() => window.location.reload()}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#dc2626',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '14px'
-            }}
-          >
-            Retry
-          </button>
+          <p style={{ fontWeight: 'bold', marginBottom: '15px', fontSize: '18px' }}>API Server Connection Failed</p>
+          <p style={{ fontSize: '14px', marginBottom: '20px', whiteSpace: 'pre-line', textAlign: 'left' }}>{loadError}</p>
+          
+          <div style={{ backgroundColor: '#fef2f2', padding: '15px', borderRadius: '6px', marginBottom: '20px', textAlign: 'left' }}>
+            <p style={{ fontWeight: 'bold', marginBottom: '10px', fontSize: '14px' }}>To fix this issue:</p>
+            <ol style={{ fontSize: '13px', paddingLeft: '20px', margin: 0 }}>
+              <li style={{ marginBottom: '5px' }}>Start your API server on port 8000</li>
+              <li style={{ marginBottom: '5px' }}>Ensure the server is accessible at <code>http://localhost:8000</code></li>
+              <li style={{ marginBottom: '5px' }}>Check that CORS is configured to allow requests from this domain</li>
+              <li style={{ marginBottom: '5px' }}>Verify the server has the <code>/features</code> and <code>/health</code> endpoints</li>
+            </ol>
+          </div>
+          
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+            <button 
+              onClick={() => window.location.reload()}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#dc2626',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: 'bold'
+              }}
+            >
+              Retry Connection
+            </button>
+            <button 
+              onClick={() => setLoadError(null)}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: 'transparent',
+                color: '#dc2626',
+                border: '2px solid #dc2626',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              Dismiss
+            </button>
+          </div>
         </div>
       )}
 
@@ -918,6 +903,7 @@ const Releases: React.FC = () => {
           className="action-btn secondary-btn" 
           onClick={handleConnectNotion}
           disabled={isSyncing}
+          title={isConnected ? 'Sync releases to Notion' : 'Connect to Notion first'}
         >
           {isSyncing ? (
             <>

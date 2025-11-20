@@ -63,13 +63,19 @@ export function OnboardingFlow({ onComplete, initialStep = 1 }: OnboardingFlowPr
       try {
         setLoading(true);
         
-        const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-        console.log('[OnboardingFlow] Using API URL:', baseURL);
+        // Use relative URL if in development with Vite proxy, otherwise use full URL
+        const baseURL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || 'http://localhost:8000');
+        const healthUrl = baseURL ? `${baseURL}/health` : '/health';
+        const companiesUrl = baseURL ? `${baseURL}/companies?skip=0&limit=100` : '/companies?skip=0&limit=100';
+        const categoriesUrl = baseURL ? `${baseURL}/categories` : '/categories';
+        
+        console.log('[OnboardingFlow] Using API URL:', baseURL || 'proxy');
+        console.log('[OnboardingFlow] Development mode:', import.meta.env.DEV);
         console.log('[OnboardingFlow] AUTH_HEADER:', AUTH_HEADER);
         
         // Test API connectivity first
         try {
-          const testResponse = await fetch(`${baseURL}/health`, {
+          const testResponse = await fetch(healthUrl, {
             headers: {
               'Authorization': AUTH_HEADER
             }
@@ -77,14 +83,14 @@ export function OnboardingFlow({ onComplete, initialStep = 1 }: OnboardingFlowPr
           console.log('[OnboardingFlow] Health check response:', testResponse.status, testResponse.statusText);
         } catch (healthError) {
           console.error('[OnboardingFlow] Health check failed:', healthError);
-          alert(`Cannot connect to API server at ${baseURL}. Please make sure the API server is running and accessible.`);
+          alert(`Cannot connect to API server at ${baseURL || 'localhost:8000'}. Please make sure the API server is running and accessible.`);
           setLoading(false);
           return;
         }
         
         // Fetch companies
-        console.log('[OnboardingFlow] Fetching companies from:', `${baseURL}/companies?skip=0&limit=100`);
-        const companiesResponse = await fetch(`${baseURL}/companies?skip=0&limit=100`, {
+        console.log('[OnboardingFlow] Fetching companies from:', companiesUrl);
+        const companiesResponse = await fetch(companiesUrl, {
           headers: {
             'Authorization': AUTH_HEADER,
             'Content-Type': 'application/json'
@@ -115,8 +121,8 @@ export function OnboardingFlow({ onComplete, initialStep = 1 }: OnboardingFlowPr
         setInitialCompetitorCount(mappedCompetitors.length > 0 ? mappedCompetitors.length : 0);
 
         // Fetch categories
-        console.log('[OnboardingFlow] Fetching categories from:', `${baseURL}/categories`);
-        const categoriesResponse = await fetch(`${baseURL}/categories`, {
+        console.log('[OnboardingFlow] Fetching categories from:', categoriesUrl);
+        const categoriesResponse = await fetch(categoriesUrl, {
           headers: {
             'Authorization': AUTH_HEADER,
             'Content-Type': 'application/json'
@@ -208,10 +214,11 @@ export function OnboardingFlow({ onComplete, initialStep = 1 }: OnboardingFlowPr
   const removeCategory = async (id: string) => {
     // If it's an existing category (from API), delete it
     if (!id.startsWith('new_')) {
-      const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const baseURL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || 'http://localhost:8000');
+      const deleteUrl = baseURL ? `${baseURL}/categories/${id}` : `/categories/${id}`;
       try {
         console.log('[OnboardingFlow] Deleting category:', id);
-        const response = await fetch(`${baseURL}/categories/${id}`, {
+        const response = await fetch(deleteUrl, {
           method: 'DELETE',
           headers: {
             'Authorization': AUTH_HEADER
@@ -243,7 +250,7 @@ export function OnboardingFlow({ onComplete, initialStep = 1 }: OnboardingFlowPr
   };
 
   const handleStartAnalysis = async () => {
-    const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    const baseURL = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_URL || 'http://localhost:8000');
     
     try {
       // Check if there are any competitors at all
@@ -272,7 +279,8 @@ export function OnboardingFlow({ onComplete, initialStep = 1 }: OnboardingFlowPr
         };
         console.log('[OnboardingFlow] Creating company with payload:', payload);
         
-        const response = await fetch(`${baseURL}/companies`, {
+        const createUrl = baseURL ? `${baseURL}/companies` : '/companies';
+        const response = await fetch(createUrl, {
           method: 'POST',
           headers: {
             'accept': 'application/json',
@@ -321,7 +329,8 @@ export function OnboardingFlow({ onComplete, initialStep = 1 }: OnboardingFlowPr
           }
           
           try {
-            const url = new URL(`${baseURL}/categories/${category.id}`);
+            const updateBaseUrl = baseURL || window.location.origin;
+            const url = new URL(`${updateBaseUrl}/categories/${category.id}`);
             url.searchParams.append('name', category.name);
             // Don't send description or is_active since we're not managing those in UI
             
@@ -364,7 +373,8 @@ export function OnboardingFlow({ onComplete, initialStep = 1 }: OnboardingFlowPr
           }
           
           try {
-            const url = new URL(`${baseURL}/categories`);
+            const createBaseUrl = baseURL || window.location.origin;
+            const url = new URL(`${createBaseUrl}/categories`);
             url.searchParams.append('name', category.name);
             if (category.description && category.description.trim()) {
               url.searchParams.append('description', category.description);
