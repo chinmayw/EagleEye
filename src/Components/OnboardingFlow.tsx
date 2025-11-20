@@ -42,7 +42,8 @@ interface CategoryAPIResponse {
   is_active?: boolean;
 }
 
-export function OnboardingFlow({ onComplete, initialStep = 1 }: OnboardingFlowProps) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function OnboardingFlow({ onComplete: _onComplete, initialStep = 1 }: OnboardingFlowProps) {
   const navigate = useNavigate();
   const [step, setStep] = useState(initialStep);
   const [companyName, setCompanyName] = useState('Mindbody Inc');
@@ -298,7 +299,7 @@ export function OnboardingFlow({ onComplete, initialStep = 1 }: OnboardingFlowPr
         }
       } else {
         // Use the first existing company from prefilled data
-        const firstCompany = competitors[0];
+        // const firstCompany = competitors[0];
       }
 
       // Update modified existing categories
