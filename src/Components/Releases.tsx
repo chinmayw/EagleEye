@@ -461,6 +461,59 @@ const Releases: React.FC = () => {
     setShowEmailModal(true);
   };
 
+  const handleExportCSV = () => {
+    if (filteredReleases.length === 0) {
+      toast.info('No data to export');
+      return;
+    }
+
+    // CSV header
+    const headers = ['Competitor', 'Feature', 'Summary', 'Category', 'Date'];
+    
+    // Helper function to escape CSV values
+    const escapeCSV = (value: string): string => {
+      if (value == null) return '';
+      const stringValue = String(value);
+      // If value contains comma, quote, or newline, wrap in quotes and escape existing quotes
+      if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+        return `"${stringValue.replace(/"/g, '""')}"`;
+      }
+      return stringValue;
+    };
+
+    // Create CSV rows
+    const csvRows = [
+      headers.join(','), // Header row
+      ...filteredReleases.map(release => [
+        escapeCSV(release.competitor),
+        escapeCSV(release.feature),
+        escapeCSV(release.summary),
+        escapeCSV(release.category),
+        escapeCSV(release.date)
+      ].join(','))
+    ];
+
+    // Combine all rows
+    const csvContent = csvRows.join('\n');
+
+    // Create blob and download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    // Generate filename with timestamp
+    const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    link.setAttribute('href', url);
+    link.setAttribute('download', `releases_${timestamp}.csv`);
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast.success(`Exported ${filteredReleases.length} releases to CSV`);
+  };
+
   const handleCloseModal = () => {
     setShowEmailModal(false);
     setEmailRecipients('');
@@ -907,7 +960,10 @@ const Releases: React.FC = () => {
           </svg>
           Send Email
         </button>
-        <button className="action-btn secondary-btn">
+        <button 
+          className="action-btn secondary-btn"
+          onClick={handleExportCSV}
+        >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M13 8V13H3V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M8 3V10M8 10L5.5 7.5M8 10L10.5 7.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
