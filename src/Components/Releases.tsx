@@ -350,19 +350,28 @@ const Releases: React.FC = () => {
     setIsSyncing(true);
     setSyncMessage(null);
 
-    // Use relative URL if in development with Vite proxy, otherwise use VITE_API_URL from .env
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    // Determine if we're actually in development (localhost) or production (Vercel)
+    const isActuallyDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const envApiUrl = import.meta.env.VITE_API_URL;
+    
+    // Force staging URL if not localhost and no env var is set
+    let apiUrl;
+    if (isActuallyDev) {
+      apiUrl = 'http://localhost:8000';
+    } else {
+      // On Vercel/production, ensure we never use localhost
+      apiUrl = envApiUrl || 'https://www.staging.arcusplatform.io/eagle-eye';
+    }
     
     console.log('[Releases] Environment check:', {
       DEV: import.meta.env.DEV,
       MODE: import.meta.env.MODE,
       PROD: import.meta.env.PROD,
-      VITE_API_URL: import.meta.env.VITE_API_URL,
-      isLocalhost: window.location.hostname === 'localhost'
+      rawViteApiUrl: envApiUrl,
+      finalApiUrl: apiUrl,
+      hostname: window.location.hostname,
+      isActuallyDev: isActuallyDev
     });
-    
-    // Determine if we're actually in development (localhost) or production (Vercel)
-    const isActuallyDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     
     // Try different endpoint variations
     const possibleEndpoints = isActuallyDev 
